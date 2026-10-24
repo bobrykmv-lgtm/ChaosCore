@@ -1,0 +1,2 @@
+# ChaosCore
+ChaosSMP plugin
