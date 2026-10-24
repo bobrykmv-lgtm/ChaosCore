@@ -27,10 +27,10 @@ jobs:
           gradle-version: '8.10.2'
 
       - name: Build plugin
-        run: gradle build
+        run: gradle -p ChaosCore-source build
 
       - name: Save plugin
         uses: actions/upload-artifact@v4
         with:
           name: ChaosCore
-          path: build/libs/*.jar
+          path: ChaosCore-source/build/libs/*.jar
