@@ -1,0 +1,14 @@
+name: ChaosCore
+version: 1.0.0
+main: com.chaossmp.chaoscore.ChaosCore
+api-version: '1.21'
+author: ChaosSMP
+description: Chaos kills, permanent power levels, and player stats.
+commands:
+  chaos:
+    description: Show your Chaos stats or leaderboard.
+    usage: /chaos [top]
+permissions:
+  chaoscore.use:
+    description: Allows using /chaos
+    default: true

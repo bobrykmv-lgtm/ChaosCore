@@ -1,0 +1,8 @@
+chaos:
+  kill-reward: 1
+  repeat-kill-cooldown-seconds: 300
+power:
+  # Total lifetime chaos required for each permanent level.
+  levels:
+    1: 5
+    2: 10
