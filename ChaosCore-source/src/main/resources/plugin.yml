@@ -1,14 +1,19 @@
+```yaml
 name: ChaosCore
-version: 1.0.0
+version: 1.1.0
 main: com.chaossmp.chaoscore.ChaosCore
 api-version: '1.21'
 author: ChaosSMP
-description: Chaos kills, permanent power levels, and player stats.
+description: Система хаоса, убийств, пяти уровней силы и статистики игроков.
+
 commands:
   chaos:
-    description: Show your Chaos stats or leaderboard.
+    description: Просмотр хаоса и таблицы лидеров.
     usage: /chaos [top]
+    permission: chaoscore.use
+
 permissions:
   chaoscore.use:
-    description: Allows using /chaos
+    description: Позволяет использовать команду /chaos.
     default: true
+```
