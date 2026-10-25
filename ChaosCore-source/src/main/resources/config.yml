@@ -1,4 +1,3 @@
-```yaml
 settings:
   language: ru
   debug: false
@@ -22,4 +21,3 @@ power:
 leaderboard:
   enabled: true
   max-players: 10
-```
