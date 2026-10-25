@@ -1,8 +1,25 @@
+```yaml
+settings:
+  language: ru
+  debug: false
+
 chaos:
+  max-chaos: 25
   kill-reward: 1
+  death-penalty: 1
   repeat-kill-cooldown-seconds: 300
+
 power:
-  # Total lifetime chaos required for each permanent level.
+  enabled: true
+  permanent: false
   levels:
     1: 5
     2: 10
+    3: 15
+    4: 20
+    5: 25
+
+leaderboard:
+  enabled: true
+  max-players: 10
+```
