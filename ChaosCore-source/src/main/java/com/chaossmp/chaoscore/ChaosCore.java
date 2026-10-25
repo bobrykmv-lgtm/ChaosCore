@@ -1,4 +1,3 @@
-```java
 package com.chaossmp.chaoscore;
 
 import org.bukkit.Bukkit;
@@ -259,4 +258,3 @@ public final class ChaosCore extends JavaPlugin implements Listener {
         return ChatColor.translateAlternateColorCodes('&', text);
     }
 }
-```
