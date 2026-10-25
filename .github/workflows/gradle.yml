@@ -1,3 +1,4 @@
+```yaml
 name: Build ChaosCore
 
 on:
@@ -34,3 +35,4 @@ jobs:
         with:
           name: ChaosCore
           path: ChaosCore-source/build/libs/*.jar
+```
