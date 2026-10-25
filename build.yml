@@ -1,8 +1,12 @@
+```yaml
 name: Build ChaosCore
 
 on:
   push:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -20,15 +24,15 @@ jobs:
 
       - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Build plugin
-        uses: gradle/gradle-build-action@v3
         with:
           gradle-version: '8.10.2'
-          arguments: build
+
+      - name: Build plugin
+        run: gradle -p ChaosCore-source build
 
       - name: Save plugin
         uses: actions/upload-artifact@v4
         with:
           name: ChaosCore
-          path: build/libs/*.jar
+          path: ChaosCore-source/build/libs/*.jar
+```
