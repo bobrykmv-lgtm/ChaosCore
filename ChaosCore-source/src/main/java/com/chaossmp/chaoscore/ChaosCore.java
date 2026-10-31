@@ -5,14 +5,15 @@ import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Arrays;
 import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,7 +24,6 @@ public final class ChaosCore extends JavaPlugin implements Listener {
 private static final MiniMessage MINI = MiniMessage.miniMessage();
 
 private ChaosDataManager dataManager;
-private ChaosLogManager logManager;
 
 private final Map<String, Long> killCooldowns = new ConcurrentHashMap<>();
 
@@ -32,16 +32,25 @@ public void onEnable() {
     saveDefaultConfig();
 
     dataManager = new ChaosDataManager(this);
-    logManager = new ChaosLogManager(this);
+
+    PluginCommand chaosCommand = getCommand("chaos");
+
+    if (chaosCommand == null) {
+        getLogger().severe("Команда /chaos не найдена в plugin.yml!");
+        getServer().getPluginManager().disablePlugin(this);
+        return;
+    }
+
+    chaosCommand.setExecutor(this);
 
     Bukkit.getPluginManager().registerEvents(this, this);
 
-    long interval = Math.max(
-            20L,
-            getConfig().getLong("settings.save-interval", 60L) * 20L
-    );
-
     if (getConfig().getBoolean("settings.auto-save", true)) {
+        long interval = Math.max(
+                20L,
+                getConfig().getLong("settings.save-interval", 60L) * 20L
+        );
+
         Bukkit.getScheduler().runTaskTimer(
                 this,
                 () -> dataManager.save(),
@@ -55,15 +64,12 @@ public void onEnable() {
 
 @Override
 public void onDisable() {
+    Bukkit.getScheduler().cancelTasks(this);
+
     if (dataManager != null) {
         dataManager.save();
     }
 
-    if (logManager != null) {
-        logManager.save();
-    }
-
-    Bukkit.getScheduler().cancelTasks(this);
     getLogger().info("ChaosCore выключен. Данные сохранены.");
 }
 
@@ -112,15 +118,8 @@ private boolean hasAdminPermission(CommandSender sender) {
     return true;
 }
 
-private Player findOnlinePlayer(String name) {
-    return Bukkit.getPlayerExact(name);
-}
-
 private int getMaxChaos() {
-    return Math.max(
-            0,
-            getConfig().getInt("settings.max-chaos", 25)
-    );
+    return Math.max(0, getConfig().getInt("settings.max-chaos", 25));
 }
 
 private boolean validAmount(String value) {
@@ -138,20 +137,12 @@ private String getReason(String[] args) {
 
     return String.join(
             " ",
-            java.util.Arrays.copyOfRange(args, 3, args.length)
+            Arrays.copyOfRange(args, 3, args.length)
     );
 }
 
-private String getAdministratorName(CommandSender sender) {
-    if (sender instanceof Player player) {
-        return player.getName();
-    }
-
-    return "CONSOLE";
-}
-
 private void showStats(CommandSender sender, String name) {
-    Player online = findOnlinePlayer(name);
+    Player online = Bukkit.getPlayerExact(name);
 
     OfflinePlayer offline = online != null
             ? online
@@ -223,126 +214,52 @@ private void showTop(CommandSender sender) {
     }
 }
 
-private void showHistory(CommandSender sender) {
-    List<Map<?, ?>> entries = logManager.getRecentEntries(10);
-
-    sendRaw(
-            sender,
-            "<gradient:#5B8CFF:#C084FC><bold>ИСТОРИЯ CHAOSCORE</bold>"
-    );
-
-    if (entries.isEmpty()) {
-        sendRaw(sender, "<gray>История пока пуста.");
-        return;
-    }
-
-    for (Map<?, ?> entry : entries) {
-        String time = String.valueOf(
-                entry.get("time") == null ? "-" : entry.get("time")
-        );
-
-        String admin = String.valueOf(
-                entry.get("administrator") == null
-                        ? "-"
-                        : entry.get("administrator")
-        );
-
-        String target = String.valueOf(
-                entry.get("target") == null
-                        ? "-"
-                        : entry.get("target")
-        );
-
-        String action = String.valueOf(
-                entry.get("action") == null
-                        ? "-"
-                        : entry.get("action")
-        );
-
-        String reason = String.valueOf(
-                entry.get("reason") == null
-                        ? "-"
-                        : entry.get("reason")
-        );
-
-        sendRaw(
-                sender,
-                "<dark_gray>[" + time + "]"
-                        + " <white>" + admin
-                        + " <gray>→ <aqua>" + target
-        );
-
-        sendRaw(
-                sender,
-                "<gray>Действие: <yellow>" + action
-                        + " <gray>| Причина: <white>" + reason
-        );
-    }
-}
-
 private void executeAdminAction(
         CommandSender sender,
         String action,
         Player target,
-        int amount,
-        String reason
+        int amount
 ) {
     UUID uuid = target.getUniqueId();
-    String administrator = getAdministratorName(sender);
 
     switch (action) {
         case "give" -> {
             int before = dataManager.getChaos(uuid);
+
             dataManager.addChaos(uuid, amount);
+
             int added = dataManager.getChaos(uuid) - before;
 
             sendFormatted(sender, "messages.given", Map.of(
                     "player", target.getName(),
                     "amount", String.valueOf(added)
             ));
-
-            logManager.log(
-                    administrator,
-                    target.getName(),
-                    "GIVE_CHAOS: " + added,
-                    reason
-            );
         }
 
         case "take" -> {
             int before = dataManager.getChaos(uuid);
+
             dataManager.removeChaos(uuid, amount);
+
             int removed = before - dataManager.getChaos(uuid);
 
             sendFormatted(sender, "messages.taken", Map.of(
                     "player", target.getName(),
                     "amount", String.valueOf(removed)
             ));
-
-            logManager.log(
-                    administrator,
-                    target.getName(),
-                    "TAKE_CHAOS: " + removed,
-                    reason
-            );
         }
 
         case "set" -> {
             dataManager.setChaos(uuid, amount);
 
-            int newAmount = dataManager.getChaos(uuid);
-
             sendFormatted(sender, "messages.set", Map.of(
                     "player", target.getName(),
-                    "amount", String.valueOf(newAmount)
+                    "amount", String.valueOf(dataManager.getChaos(uuid))
             ));
+        }
 
-            logManager.log(
-                    administrator,
-                    target.getName(),
-                    "SET_CHAOS: " + newAmount,
-                    reason
-            );
+        default -> {
+            return;
         }
     }
 
@@ -397,14 +314,6 @@ public boolean onCommand(
             showStats(sender, args[1]);
         }
 
-        case "history" -> {
-            if (!hasAdminPermission(sender)) {
-                return true;
-            }
-
-            showHistory(sender);
-        }
-
         case "give", "take", "set" -> {
             if (!hasAdminPermission(sender)) {
                 return true;
@@ -415,7 +324,7 @@ public boolean onCommand(
                 return true;
             }
 
-            Player target = findOnlinePlayer(args[1]);
+            Player target = Bukkit.getPlayerExact(args[1]);
 
             if (target == null) {
                 send(sender, "messages.player-not-found");
@@ -423,14 +332,12 @@ public boolean onCommand(
             }
 
             int amount = Integer.parseInt(args[2]);
-            String reason = getReason(args);
 
             executeAdminAction(
                     sender,
                     subcommand,
                     target,
-                    amount,
-                    reason
+                    amount
             );
         }
 
@@ -445,7 +352,7 @@ public boolean onCommand(
 
         default -> sendRaw(
                 sender,
-                "<red>Использование: /chaos [top|stats|check|history|give|take|set|reload]"
+                "<red>Использование: /chaos [top|stats|check|give|take|set|reload]"
         );
     }
 
@@ -459,8 +366,7 @@ public void onPlayerDeath(PlayerDeathEvent event) {
 
     dataManager.addDeath(victim.getUniqueId());
 
-    if (killer == null
-            || killer.getUniqueId().equals(victim.getUniqueId())) {
+    if (killer == null || killer.getUniqueId().equals(victim.getUniqueId())) {
         return;
     }
 
@@ -468,9 +374,7 @@ public void onPlayerDeath(PlayerDeathEvent event) {
 
     long now = System.currentTimeMillis();
 
-    String key = killer.getUniqueId()
-            + ":"
-            + victim.getUniqueId();
+    String key = killer.getUniqueId() + ":" + victim.getUniqueId();
 
     long cooldown = getConfig().getLong(
             "settings.kill-cooldown",
