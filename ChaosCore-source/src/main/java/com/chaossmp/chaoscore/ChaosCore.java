@@ -12,6 +12,7 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -222,6 +223,49 @@ public final class ChaosCore extends JavaPlugin implements Listener {
         }
     }
 
+    private void showHistory(CommandSender sender) {
+        List<Map<?, ?>> entries = logManager.getRecentEntries(10);
+
+        sendRaw(
+                sender,
+                "<gradient:#5B8CFF:#C084FC><bold>ИСТОРИЯ CHAOSCORE</bold>"
+        );
+
+        if (entries.isEmpty()) {
+            sendRaw(sender, "<gray>История пока пуста.");
+            return;
+        }
+
+        for (Map<?, ?> entry : entries) {
+            String time = String.valueOf(entry.getOrDefault("time", "-"));
+            String admin = String.valueOf(
+                    entry.getOrDefault("administrator", "-")
+            );
+            String target = String.valueOf(
+                    entry.getOrDefault("target", "-")
+            );
+            String action = String.valueOf(
+                    entry.getOrDefault("action", "-")
+            );
+            String reason = String.valueOf(
+                    entry.getOrDefault("reason", "-")
+            );
+
+            sendRaw(
+                    sender,
+                    "<dark_gray>[" + time + "]"
+                            + " <white>" + admin
+                            + " <gray>→ <aqua>" + target
+            );
+
+            sendRaw(
+                    sender,
+                    "<gray>Действие: <yellow>" + action
+                            + " <gray>| Причина: <white>" + reason
+            );
+        }
+    }
+
     private void executeAdminAction(
             CommandSender sender,
             String action,
@@ -304,6 +348,11 @@ public final class ChaosCore extends JavaPlugin implements Listener {
                 return true;
             }
 
+            if (!player.hasPermission("chaoscore.use")) {
+                send(player, "messages.no-permission");
+                return true;
+            }
+
             showStats(player, player.getName());
             return true;
         }
@@ -311,15 +360,35 @@ public final class ChaosCore extends JavaPlugin implements Listener {
         String subcommand = args[0].toLowerCase();
 
         switch (subcommand) {
-            case "top" -> showTop(sender);
+            case "top" -> {
+                if (!sender.hasPermission("chaoscore.use")) {
+                    send(sender, "messages.no-permission");
+                    return true;
+                }
+
+                showTop(sender);
+            }
 
             case "stats", "check" -> {
+                if (!sender.hasPermission("chaoscore.use")) {
+                    send(sender, "messages.no-permission");
+                    return true;
+                }
+
                 if (args.length < 2) {
                     send(sender, "messages.invalid-player");
                     return true;
                 }
 
                 showStats(sender, args[1]);
+            }
+
+            case "history" -> {
+                if (!hasAdminPermission(sender)) {
+                    return true;
+                }
+
+                showHistory(sender);
             }
 
             case "give", "take", "set" -> {
@@ -362,7 +431,7 @@ public final class ChaosCore extends JavaPlugin implements Listener {
 
             default -> sendRaw(
                     sender,
-                    "<red>Использование: /chaos [top|stats|check|give|take|set|reload]"
+                    "<red>Использование: /chaos [top|stats|check|history|give|take|set|reload]"
             );
         }
 
