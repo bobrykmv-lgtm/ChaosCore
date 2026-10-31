@@ -2,35 +2,34 @@ name: Build ChaosCore
 
 on:
   push:
+    branches:
+      - main
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download source
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Java 21
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
+          cache: gradle
 
-      - name: Install Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
 
-      - name: Build plugin
-        run: gradle -p ChaosCore-source build
+      - name: Build ChaosCore
+        run: gradle -p ChaosCore-source clean build
 
-      - name: Save plugin
+      - name: Upload ChaosCore JAR
         uses: actions/upload-artifact@v4
         with:
-          name: ChaosCore
-          path: ChaosCore-source/build/libs/*.jar
+          name: ChaosCore-1.0.0
+          path: ChaosCore-source/build/libs/ChaosCore-1.0.0.jar
+          if-no-files-found: error
