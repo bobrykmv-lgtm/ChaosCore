@@ -1,23 +1,56 @@
 settings:
-  language: ru
-  debug: false
 
-chaos:
-  max-chaos: 25
-  kill-reward: 1
-  death-penalty: 1
-  repeat-kill-cooldown-seconds: 300
+# Максимальное количество хаосов
 
-power:
-  enabled: true
-  permanent: false
-  levels:
-    1: 5
-    2: 10
-    3: 15
-    4: 20
-    5: 25
+max-chaos: 25
 
-leaderboard:
-  enabled: true
-  max-players: 10
+# Количество хаосов за убийство игрока
+
+chaos-per-kill: 1
+
+# Задержка повторного получения хаосов за убийство той же цели (секунды)
+
+kill-cooldown: 300
+
+# Сохранять данные автоматически
+
+auto-save: true
+
+# Интервал автосохранения (секунды)
+
+save-interval: 60
+
+power-levels:
+enabled: true
+thresholds:
+1: 5
+2: 10
+3: 15
+4: 20
+5: 25
+
+messages:
+prefix: "[gradient:#5B8CFF:#C084FC](gradient:#5B8CFF:#C084FC)<bold>CHAOS</bold></gradient> <dark_gray>»</dark_gray> "
+
+no-permission: "<red>У вас нет прав для выполнения этой команды."
+player-only: "<red>Эту команду может выполнить только игрок."
+player-not-found: "<red>Игрок не найден."
+invalid-amount: "<red>Укажите корректное количество хаосов."
+max-reached: "<red>Достигнут максимальный лимит хаосов."
+cooldown: "<yellow>Вы уже получали хаосы за убийство этого игрока. Подождите: <white>{time} сек."
+received: "<green>Вы получили <white>{amount} <green>хаосов!"
+given: "<green>Игроку <white>{player} <green>выдано <white>{amount} <green>хаосов."
+taken: "<yellow>У игрока <white>{player} <yellow>забрано <white>{amount} <yellow>хаосов."
+set: "<green>Количество хаосов игрока <white>{player} <green>установлено на <white>{amount}<green>."
+check: "<gray>Хаосы игрока <white>{player}<gray>: <aqua>{chaos}<gray>/<aqua>{max}<gray>. Уровень силы: <light_purple>{power}<gray>."
+reloaded: "<green>Конфигурация ChaosCore перезагружена."
+invalid-player: "<red>Укажите имя игрока."
+self-kill: "<red>За самоубийство хаосы не начисляются."
+kill-reward: "<green>За убийство игрока вы получили <white>{amount} <green>хаосов."
+
+storage:
+file: "players.yml"
+
+logging:
+enabled: true
+file: "logs.yml"
