@@ -1,260 +1,315 @@
 package com.chaossmp.chaoscore;
 
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.*;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 public final class ChaosCore extends JavaPlugin implements Listener {
 
-    private File dataFile;
-    private YamlConfiguration data;
-    private final Map<String, Long> lastKillTime = new ConcurrentHashMap<>();
+private static final MiniMessage MINI = MiniMessage.miniMessage();
 
-    private static final int MAX_CHAOS = 25;
-    private static final long KILL_COOLDOWN_MS = 300_000L;
+private ChaosDataManager dataManager;
 
-    @Override
-    public void onEnable() {
-        saveDefaultConfig();
+// Время последнего вознаграждения за убийство конкретной цели
+private final Map<String, Long> killCooldowns = new ConcurrentHashMap<>();
 
-        if (!getDataFolder().exists() && !getDataFolder().mkdirs()) {
-            getLogger().warning("Не удалось создать папку данных.");
-        }
+@Override
+public void onEnable() {
+    saveDefaultConfig();
 
-        dataFile = new File(getDataFolder(), "players.yml");
-        data = YamlConfiguration.loadConfiguration(dataFile);
+    dataManager = new ChaosDataManager(this);
 
-        getServer().getPluginManager().registerEvents(this, this);
+    Bukkit.getPluginManager().registerEvents(this, this);
 
-        // Восстанавливаем постоянную силу после входа игрока.
-        Bukkit.getOnlinePlayers().forEach(this::restorePower);
+    long interval = Math.max(
+            20L,
+            getConfig().getLong("settings.save-interval", 60L) * 20L
+    );
 
-        getLogger().info("ChaosCore включён. Максимум хаоса: 25.");
+    if (getConfig().getBoolean("settings.auto-save", true)) {
+        Bukkit.getScheduler().runTaskTimer(
+                this,
+                () -> dataManager.save(),
+                interval,
+                interval
+        );
     }
 
-    @Override
-    public void onDisable() {
-        saveData();
+    getLogger().info("ChaosCore успешно запущен!");
+}
+
+@Override
+public void onDisable() {
+    if (dataManager != null) {
+        dataManager.save();
     }
 
-    @EventHandler
-    public void onPlayerDeath(PlayerDeathEvent event) {
-        Player victim = event.getEntity();
-        Player killer = victim.getKiller();
+    Bukkit.getScheduler().cancelTasks(this);
+    getLogger().info("ChaosCore выключен. Данные сохранены.");
+}
 
-        if (killer == null || killer.equals(victim)) {
-            return;
-        }
+private void send(CommandSender sender, String path) {
+    String prefix = getConfig().getString("messages.prefix", "");
+    String message = getConfig().getString(path, "<red>Сообщение не найдено.");
 
-        String pair = killer.getUniqueId() + ":" + victim.getUniqueId();
-        long now = System.currentTimeMillis();
+    sender.sendMessage(MINI.deserialize(prefix + message));
+}
 
-        Long last = lastKillTime.get(pair);
+private void sendRaw(CommandSender sender, String message) {
+    String prefix = getConfig().getString("messages.prefix", "");
+    sender.sendMessage(MINI.deserialize(prefix + message));
+}
 
-        if (last != null && now - last < KILL_COOLDOWN_MS) {
-            long seconds = Math.max(1, (KILL_COOLDOWN_MS - (now - last)) / 1000);
+private void sendFormatted(CommandSender sender, String path,
+                           Map<String, String> placeholders) {
+    String prefix = getConfig().getString("messages.prefix", "");
+    String message = getConfig().getString(path, "<red>Сообщение не найдено.");
 
-            killer.sendMessage(color(
-                "&8[&bChaos&8] &cПовторное убийство не приносит хаос. Осталось: "
-                    + seconds + " сек."
-            ));
-
-            return;
-        }
-
-        lastKillTime.put(pair, now);
-
-        String killerPath = "players." + killer.getUniqueId();
-        String victimPath = "players." + victim.getUniqueId();
-
-        int killerBalance = data.getInt(killerPath + ".balance", 0);
-        int victimBalance = data.getInt(victimPath + ".balance", 0);
-
-        int killerLifetime = data.getInt(killerPath + ".lifetime", 0);
-        int victimLifetime = data.getInt(victimPath + ".lifetime", 0);
-
-        // Убийца получает +1, но не больше 25.
-        int newKillerBalance = Math.min(MAX_CHAOS, killerBalance + 1);
-        int newKillerLifetime = Math.min(MAX_CHAOS, killerLifetime + 1);
-
-        // Жертва теряет 1 хаос, но не опускается ниже 0.
-        int newVictimBalance = Math.max(0, victimBalance - 1);
-        int newVictimLifetime = Math.max(0, victimLifetime - 1);
-
-        data.set(killerPath + ".balance", newKillerBalance);
-        data.set(killerPath + ".lifetime", newKillerLifetime);
-
-        data.set(victimPath + ".balance", newVictimBalance);
-        data.set(victimPath + ".lifetime", newVictimLifetime);
-
-        saveData();
-
-        killer.sendMessage(color(
-            "&8[&bChaos&8] &aВы получили +1 хаос! Баланс: &b"
-                + newKillerBalance + "&7/&b25"
-        ));
-
-        victim.sendMessage(color(
-            "&8[&bChaos&8] &cВы потеряли 1 хаос. Баланс: &b"
-                + newVictimBalance + "&7/&b25"
-        ));
-
-        updatePower(killer, newKillerLifetime);
-        updatePower(victim, newVictimLifetime);
+    for (Map.Entry<String, String> entry : placeholders.entrySet()) {
+        message = message.replace(
+                "{" + entry.getKey() + "}",
+                entry.getValue()
+        );
     }
 
-    private int getPowerLevel(int chaos) {
-        if (chaos >= 25) return 5;
-        if (chaos >= 20) return 4;
-        if (chaos >= 15) return 3;
-        if (chaos >= 10) return 2;
-        if (chaos >= 5) return 1;
-        return 0;
+    sender.sendMessage(MINI.deserialize(prefix + message));
+}
+
+private boolean hasAdminPermission(CommandSender sender) {
+    if (!sender.hasPermission("chaoscore.admin")) {
+        send(sender, "messages.no-permission");
+        return false;
+    }
+    return true;
+}
+
+private Player findOnlinePlayer(String name) {
+    return Bukkit.getPlayerExact(name);
+}
+
+private int getMaxChaos() {
+    return Math.max(0, getConfig().getInt("settings.max-chaos", 25));
+}
+
+private boolean validAmount(String value) {
+    try {
+        return Integer.parseInt(value) >= 0;
+    } catch (NumberFormatException exception) {
+        return false;
+    }
+}
+
+private void showStats(CommandSender sender, String name) {
+    Player online = findOnlinePlayer(name);
+
+    OfflinePlayer offline = online != null
+            ? online
+            : Bukkit.getOfflinePlayer(name);
+
+    UUID uuid = offline.getUniqueId();
+
+    if (uuid == null || (!offline.hasPlayedBefore() && online == null)) {
+        send(sender, "messages.player-not-found");
+        return;
     }
 
-    private void updatePower(Player player, int chaos) {
-        int level = getPowerLevel(chaos);
-        String path = "players." + player.getUniqueId() + ".power";
+    sendFormatted(sender, "messages.check", Map.of(
+            "player", offline.getName() == null ? name : offline.getName(),
+            "chaos", String.valueOf(dataManager.getChaos(uuid)),
+            "max", String.valueOf(getMaxChaos()),
+            "power", String.valueOf(dataManager.getPowerLevel(uuid))
+    ));
 
-        data.set(path, level);
-        saveData();
+    sendRaw(sender,
+            "<gray>Убийства: <green>" + dataManager.getKills(uuid)
+                    + " <gray>| Смерти: <red>"
+                    + dataManager.getDeaths(uuid)
+    );
+}
 
-        player.removePotionEffect(PotionEffectType.STRENGTH);
+private void showTop(CommandSender sender) {
+    var entries = dataManager.getAllChaos().entrySet()
+            .stream()
+            .sorted(Map.Entry.<UUID, Integer>comparingByValue(
+                    Comparator.reverseOrder()
+            ))
+            .limit(10)
+            .toList();
 
-        if (level > 0) {
-            player.addPotionEffect(new PotionEffect(
-                PotionEffectType.STRENGTH,
-                PotionEffect.INFINITE_DURATION,
-                level - 1,
-                false,
-                false,
-                true
-            ));
-        }
+    sendRaw(sender, "<gradient:#5B8CFF:#C084FC><bold>ТОП-10 CHAOS</bold>");
 
-        if (level > 0) {
-            player.sendMessage(color(
-                "&8[&bChaos&8] &fВаш уровень силы: &b" + level
-                    + " &7(Strength " + level + ")"
-            ));
-        }
+    if (entries.isEmpty()) {
+        sendRaw(sender, "<gray>Пока нет данных.");
+        return;
     }
 
-    private void restorePower(Player player) {
-        String path = "players." + player.getUniqueId();
-        int chaos = data.getInt(path + ".lifetime", 0);
-        updatePower(player, chaos);
-    }
+    int position = 1;
 
-    @Override
-    public boolean onCommand(
+    for (Map.Entry<UUID, Integer> entry : entries) {
+        OfflinePlayer player = Bukkit.getOfflinePlayer(entry.getKey());
+
+        String name = player.getName() == null
+                ? entry.getKey().toString().substring(0, 8)
+                : player.getName();
+
+        sendRaw(sender,
+                "<gray>" + position + ". <white>" + name
+                        + " <dark_gray>— <aqua>" + entry.getValue()
+                        + " <gray>хаосов"
+        );
+
+        position++;
+    }
+}
+
+@Override
+public boolean onCommand(
         CommandSender sender,
         Command command,
         String label,
         String[] args
-    ) {
-        if (!command.getName().equalsIgnoreCase("chaos")) {
-            return false;
+) {
+    if (args.length == 0) {
+        if (!(sender instanceof Player player)) {
+            send(sender, "messages.player-only");
+            return true;
         }
 
-        if (args.length > 0 && args[0].equalsIgnoreCase("top")) {
-            List<Map.Entry<String, Integer>> ranking = new ArrayList<>();
+        showStats(player, player.getName());
+        return true;
+    }
 
-            if (data.getConfigurationSection("players") != null) {
-                for (String key :
-                    data.getConfigurationSection("players").getKeys(false)) {
+    String subcommand = args[0].toLowerCase();
 
-                    ranking.add(Map.entry(
-                        key,
-                        data.getInt("players." + key + ".lifetime", 0)
+    switch (subcommand) {
+        case "top" -> showTop(sender);
+
+        case "stats", "check" -> {
+            if (args.length < 2) {
+                send(sender, "messages.invalid-player");
+                return true;
+            }
+            showStats(sender, args[1]);
+        }
+
+        case "give", "take", "set" -> {
+            if (!hasAdminPermission(sender)) return true;
+
+            if (args.length < 3 || !validAmount(args[2])) {
+                send(sender, "messages.invalid-amount");
+                return true;
+            }
+
+            Player target = findOnlinePlayer(args[1]);
+
+            if (target == null) {
+                send(sender, "messages.player-not-found");
+                return true;
+            }
+
+            int amount = Integer.parseInt(args[2]);
+            UUID uuid = target.getUniqueId();
+
+            switch (subcommand) {
+                case "give" -> {
+                    int before = dataManager.getChaos(uuid);
+                    dataManager.addChaos(uuid, amount);
+                    int added = dataManager.getChaos(uuid) - before;
+
+                    sendFormatted(sender, "messages.given", Map.of(
+                            "player", target.getName(),
+                            "amount", String.valueOf(added)
+                    ));
+                }
+
+                case "take" -> {
+                    int before = dataManager.getChaos(uuid);
+                    dataManager.removeChaos(uuid, amount);
+                    int removed = before - dataManager.getChaos(uuid);
+
+                    sendFormatted(sender, "messages.taken", Map.of(
+                            "player", target.getName(),
+                            "amount", String.valueOf(removed)
+                    ));
+                }
+
+                case "set" -> {
+                    dataManager.setChaos(uuid, amount);
+
+                    sendFormatted(sender, "messages.set", Map.of(
+                            "player", target.getName(),
+                            "amount", String.valueOf(dataManager.getChaos(uuid))
                     ));
                 }
             }
 
-            ranking.sort((a, b) ->
-                Integer.compare(b.getValue(), a.getValue())
-            );
-
-            sender.sendMessage(color(
-                "&8&m----------&r &bТоп ChaosSMP &8&m----------"
-            ));
-
-            int limit = Math.min(10, ranking.size());
-
-            for (int i = 0; i < limit; i++) {
-                OfflinePlayer offline =
-                    Bukkit.getOfflinePlayer(UUID.fromString(ranking.get(i).getKey()));
-
-                String name = offline.getName() == null
-                    ? "Неизвестно"
-                    : offline.getName();
-
-                sender.sendMessage(color(
-                    "&b" + (i + 1) + ". &f" + name + " &7- &b"
-                        + ranking.get(i).getValue() + "/25 хаоса"
-                ));
-            }
-
-            return true;
+            dataManager.save();
         }
 
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("Используйте: /chaos top");
-            return true;
+        case "reload" -> {
+            if (!hasAdminPermission(sender)) return true;
+
+            reloadConfig();
+            send(sender, "messages.reloaded");
         }
 
-        String path = "players." + player.getUniqueId();
-
-        int balance = data.getInt(path + ".balance", 0);
-        int lifetime = data.getInt(path + ".lifetime", 0);
-        int power = data.getInt(path + ".power", 0);
-
-        player.sendMessage(color(
-            "&8&m----------&r &bChaosSMP &8&m----------"
-        ));
-        player.sendMessage(color(
-            "&fВаш хаос: &b" + balance + "&7/&b25"
-        ));
-        player.sendMessage(color(
-            "&fВсего хаоса: &b" + lifetime + "&7/&b25"
-        ));
-        player.sendMessage(color(
-            "&fУровень силы: &b" + power + "&7/&b5"
-        ));
-
-        return true;
+        default -> sendRaw(sender,
+                "<red>Использование: /chaos [top|stats|check|give|take|set|reload]"
+        );
     }
 
-    private void saveData() {
-        if (data == null || dataFile == null) {
-            return;
-        }
+    return true;
+}
 
-        try {
-            data.save(dataFile);
-        } catch (IOException e) {
-            getLogger().severe(
-                "Не удалось сохранить players.yml: " + e.getMessage()
-            );
-        }
+@EventHandler
+public void onPlayerDeath(PlayerDeathEvent event) {
+    Player victim = event.getEntity();
+    Player killer = victim.getKiller();
+
+    dataManager.addDeath(victim.getUniqueId());
+
+    if (killer == null || killer.getUniqueId().equals(victim.getUniqueId())) {
+        return;
     }
 
-    private String color(String text) {
-        return ChatColor.translateAlternateColorCodes('&', text);
+    dataManager.addKill(killer.getUniqueId());
+
+    long now = System.currentTimeMillis();
+    String key = killer.getUniqueId() + ":" + victim.getUniqueId();
+
+    long cooldown = getConfig().getLong("settings.kill-cooldown", 300);
+    long lastKill = killCooldowns.getOrDefault(key, 0L);
+
+    if (now - lastKill < TimeUnit.SECONDS.toMillis(cooldown)) {
+        return;
     }
+
+    killCooldowns.put(key, now);
+
+    int reward = Math.max(0,
+            getConfig().getInt("settings.chaos-per-kill", 1));
+
+    int before = dataManager.getChaos(killer.getUniqueId());
+    dataManager.addChaos(killer.getUniqueId(), reward);
+    int received = dataManager.getChaos(killer.getUniqueId()) - before;
+
+    if (received > 0) {
+        sendFormatted(killer, "messages.kill-reward",
+                Map.of("amount", String.valueOf(received)));
+    }
+}
 }
