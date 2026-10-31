@@ -8,7 +8,7 @@ description: Основная система хаосов сервера ChaosSM
 commands:
 chaos:
 description: Система хаосов
-usage: /chaos [top|stats|give|take|set|check|reload]
+usage: /chaos [top|stats|give|take|set|check|reload|history]
 aliases:
 - хаос
 
